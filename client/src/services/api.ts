@@ -13,6 +13,11 @@ export const analyzeResume = async (file: File) => {
   return response.data;
 };
 
+export const autoFillResume = async (rawText: string) => {
+  const response = await api.post('/resume/autofill', { rawText });
+  return response.data;
+};
+
 export const matchJob = async (resumeText: string, jobDescription: string) => {
   const response = await api.post('/job/match', {
     resumeText,

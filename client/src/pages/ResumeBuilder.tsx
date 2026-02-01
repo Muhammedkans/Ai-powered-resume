@@ -1,11 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Wand2, Plus, Trash2, Github, Linkedin, Mail, Phone, Globe } from 'lucide-react';
+import { Download, Wand2, Plus, Trash2, Linkedin, Mail, Phone, Globe, Sparkles, X, Loader2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { autoFillResume } from '../services/api';
 import jsPDF from 'jspdf';
 
 export const ResumeBuilder = () => {
   const [activeTab, setActiveTab] = useState('personal');
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [loading, setLoading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const [resume, setResume] = useState({
@@ -16,9 +20,22 @@ export const ResumeBuilder = () => {
     projects: [{ id: 1, title: '', link: '', description: '' }]
   });
 
-  const [newSkill, setNewSkill] = useState('');
+  const handleAutoFill = async () => {
+    if (!aiInput.trim()) return;
+    setLoading(true);
+    try {
+      const data = await autoFillResume(aiInput);
+      setResume(data);
+      setShowAiModal(false);
+      setAiInput('');
+    } catch (error) {
+      console.error(error);
+      alert("AI Auto-fill failed. Check console for details.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Handlers
   const handlePersonalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setResume({ ...resume, personal: { ...resume.personal, [e.target.name]: e.target.value } });
   };
@@ -39,8 +56,8 @@ export const ResumeBuilder = () => {
     setResume({ ...resume, [section]: [...resume[section], defaultItems[section]] });
   };
 
-  const removeItem = (section: any, id: number) => {
-    setResume({ ...resume, [section]: resume[section].filter((item: any) => item.id !== id) });
+  const removeItem = (section: keyof typeof resume, id: number) => {
+    setResume({ ...resume, [section]: (resume[section] as any[]).filter((item: any) => item.id !== id) });
   };
 
   const addSkill = (e: React.KeyboardEvent) => {
@@ -53,6 +70,8 @@ export const ResumeBuilder = () => {
   const removeSkill = (skillToRemove: string) => {
     setResume({ ...resume, skills: resume.skills.filter(s => s !== skillToRemove) });
   };
+
+  const [newSkill, setNewSkill] = useState('');
 
   const downloadPDF = async () => {
     if (!previewRef.current) return;
@@ -72,6 +91,41 @@ export const ResumeBuilder = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex pt-20 h-screen overflow-hidden">
+      {/* AI Modal */}
+      <AnimatePresence>
+        {showAiModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAiModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-2xl shadow-2xl">
+              <button onClick={() => setShowAiModal(false)} className="absolute top-6 right-6 text-slate-500 hover:text-white"><X className="w-6 h-6" /></button>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-cyan-400">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">AI Resume Architect</h2>
+                  <p className="text-slate-400">Paste your raw details, projects, or an old resume text. AI will structure it perfectly.</p>
+                </div>
+              </div>
+              <textarea
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                placeholder="Example: I worked at Google for 2 years as a Senior Engineer. I built a search engine and managed a team of 10. My education is from Harvard..."
+                className="w-full h-60 bg-slate-950 border border-slate-700 rounded-2xl p-4 text-slate-300 focus:outline-none focus:border-cyan-500 transition-colors mb-6 resize-none"
+              />
+              <button
+                onClick={handleAutoFill}
+                disabled={loading || !aiInput.trim()}
+                className="w-full py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                {loading ? 'AI is working...' : 'GENERATE STRUCTURED RESUME'}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Editor Sidebar */}
       <div className="w-1/2 p-8 border-r border-slate-800 flex flex-col h-full">
         <header className="flex justify-between items-center mb-8 flex-shrink-0">
@@ -79,7 +133,10 @@ export const ResumeBuilder = () => {
             <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Resume Architect</h1>
             <p className="text-slate-400 text-sm">Design your professional career identity.</p>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-cyan-400 hover:bg-slate-800 transition-colors text-sm font-medium">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-cyan-400 hover:bg-slate-800 transition-colors text-sm font-medium"
+          >
             <Wand2 className="w-4 h-4" /> AI Auto-Fill
           </button>
         </header>
@@ -134,7 +191,7 @@ export const ResumeBuilder = () => {
 
             {activeTab === 'experience' && (
               <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
-                {resume.experience.map((exp: any, index: number) => (
+                {resume.experience.map((exp: any) => (
                   <div key={exp.id} className="p-5 bg-slate-900/30 border border-slate-800 rounded-2xl relative group hover:border-slate-700 transition-all">
                     <button onClick={() => removeItem('experience', exp.id)} className="absolute top-4 right-4 text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2 className="w-4 h-4" />

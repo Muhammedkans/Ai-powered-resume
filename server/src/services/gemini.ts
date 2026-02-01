@@ -22,15 +22,10 @@ export const analyzeResume = async (resumeText: string) => {
 
     Return the response in this exact JSON structure:
     {
-      "atsScore": number (0-100),
+      "score": number (0-100),
       "candidateName": "inferred name",
       "summary": "2 sentence professional summary",
-      "topSkills": ["skill1", "skill2", ...],
-      "missingKeywords": ["keyword1", "keyword2", ...],
-      "jobMatch": [
-        {"role": "Job Role 1", "matchPercentage": number},
-        {"role": "Job Role 2", "matchPercentage": number}
-      ],
+      "strengths": ["skill1", "skill2", ...],
       "improvements": [
         "Specific advice 1",
         "Specific advice 2"
@@ -41,15 +36,20 @@ export const analyzeResume = async (resumeText: string) => {
   try {
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let text = response.text();
+    let text = response.text().trim();
 
-    // Cleanup json formatting if AI adds markdown code blocks
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Deep clean JSON
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
+    } else {
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    }
 
     return JSON.parse(text);
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);
-    throw new Error("Failed to analyze resume with AI");
+    throw new Error("Failed to analyze resume with AI. Check API Key or Content.");
   }
 };
 
@@ -90,5 +90,53 @@ export const matchResumeWithJob = async (resumeText: string, jobDescription: str
   } catch (error) {
     console.error("Gemini Job Match Error:", error);
     throw new Error("Failed to compare resume with job");
+  }
+};
+export const generateResumeStructuredData = async (rawText: string) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is missing in .env file");
+  }
+
+  const prompt = `
+    You are an expert Resume Writer. Extract structured data from the following raw text or old resume content.
+    
+    RAW CONTENT:
+    "${rawText.substring(0, 8000)}"
+
+    Return a JSON object exactly in this format (ensure all fields are strings or arrays as shown):
+    {
+      "personal": {
+        "fullName": "name",
+        "email": "email",
+        "phone": "phone",
+        "linkedin": "url",
+        "github": "url",
+        "website": "url",
+        "summary": "professional summary"
+      },
+      "experience": [
+        { "id": 1, "role": "role", "company": "company", "date": "duration", "description": "bullet points" }
+      ],
+      "education": [
+        { "id": 1, "degree": "degree", "school": "institution", "date": "year" }
+      ],
+      "skills": ["Skill 1", "Skill 2"],
+      "projects": [
+        { "id": 1, "title": "title", "link": "url", "description": "impact" }
+      ]
+    }
+    
+    If data is missing, use empty strings. Do not invent details, but clean up grammar.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text().trim();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Gemini AutoFill Error:", error);
+    throw new Error("Failed to structure resume data");
   }
 };

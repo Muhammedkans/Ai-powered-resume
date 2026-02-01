@@ -1,10 +1,11 @@
 import express from 'express';
-import { uploadResume } from '../controllers/resumeController';
+import { uploadResume, autoFillResume } from '../controllers/resumeController';
 import { upload } from '../middleware/upload';
 
 const router = express.Router();
 
-// POST /api/resume/upload
-router.post('/upload', upload.single('resume'), uploadResume);
+// POST /api/resume/analyze
+router.post('/analyze', upload.single('resume'), uploadResume);
+router.post('/autofill', autoFillResume);
 
 export default router;
