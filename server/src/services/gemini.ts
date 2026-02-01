@@ -4,6 +4,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Initialize Gemini
+if (!process.env.GEMINI_API_KEY) {
+  console.error("❌ CRITICAL: GEMINI_API_KEY is not set in .env file!");
+} else {
+  console.log("✅ Gemini API Key detected. Ready for analysis.");
+}
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -140,3 +146,69 @@ export const generateResumeStructuredData = async (rawText: string) => {
     throw new Error("Failed to structure resume data");
   }
 };
+
+export const generateCoverLetter = async (resumeText: string, jobDescription: string) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is missing");
+  }
+
+  const prompt = `
+    You are an expert Career Coach and Copywriter.
+    Write a highly personalized, professional Cover Letter based on the candidate's resume and the job description.
+    
+    RESUME: "${resumeText.substring(0, 3000)}"
+    JOB DESCRIPTION: "${jobDescription.substring(0, 3000)}"
+    
+    The cover letter should:
+    1. Be engaging and not generic.
+    2. Highlight specific achievements from the resume that match the JD.
+    3. Use a professional but modern tone.
+    4. Return ONLY the body of the letter (no "Here is your letter" preamble).
+    5. Use [Your Name], [Company Name] identifiers if actual names aren't found.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text().trim();
+  } catch (error) {
+    console.error("Gemini Cover Letter Error:", error);
+    throw new Error("Failed to generate cover letter");
+  }
+};
+
+export const optimizeLinkedIn = async (resumeText: string) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is missing");
+  }
+
+  const prompt = `
+    You are a LinkedIn Branding Expert. Based on the following resume, generate professional LinkedIn content.
+    
+    RESUME: "${resumeText.substring(0, 5000)}"
+
+    Provide the response in this exact JSON structure:
+    {
+      "headline": "A punchy, keyword-rich headline (max 220 chars)",
+      "about": "A compelling 3-paragraph story-driven 'About' section in first person",
+      "experience": [
+        { "company": "company name", "bulletPoints": "3 high-impact bullet points for this role" }
+      ],
+      "skills": ["top 5 skills to feature"]
+    }
+
+    Return ONLY clean JSON.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text().trim();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Gemini LinkedIn Error:", error);
+    throw new Error("Failed to optimize LinkedIn profile");
+  }
+};
+

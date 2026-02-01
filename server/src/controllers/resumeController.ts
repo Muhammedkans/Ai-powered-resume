@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdf = require('pdf-parse');
-import { analyzeResume, generateResumeStructuredData } from '../services/gemini';
+import { analyzeResume, generateResumeStructuredData, generateCoverLetter, optimizeLinkedIn } from '../services/gemini';
 
 export const uploadResume = async (req: Request, res: Response) => {
   try {
@@ -14,7 +12,13 @@ export const uploadResume = async (req: Request, res: Response) => {
     const dataBuffer = fs.readFileSync(filePath);
 
     // Parse PDF
-    const data = await pdf(dataBuffer);
+    let pdfParser = require('pdf-parse');
+    // Handle ES module default export if present
+    if (typeof pdfParser !== 'function' && pdfParser.default) {
+      pdfParser = pdfParser.default;
+    }
+
+    const data = await pdfParser(dataBuffer);
     const extractedText = data.text;
 
     // Analyze with Gemini AI
@@ -48,3 +52,31 @@ export const autoFillResume = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Auto-fill failed', error: (error as Error).message });
   }
 };
+
+export const createCoverLetter = async (req: Request, res: Response) => {
+  try {
+    const { resumeText, jobDescription } = req.body;
+    if (!resumeText || !jobDescription) {
+      return res.status(400).json({ message: 'Resume text and Job Description are required' });
+    }
+
+    const coverLetter = await generateCoverLetter(resumeText, jobDescription);
+    res.status(200).json({ coverLetter });
+  } catch (error) {
+    res.status(500).json({ message: 'Cover letter generation failed', error: (error as Error).message });
+  }
+};
+
+export const generateLinkedInProfile = async (req: Request, res: Response) => {
+  try {
+    const { resumeText } = req.body;
+    if (!resumeText) return res.status(400).json({ message: 'Resume text is required' });
+
+    const linkedInData = await optimizeLinkedIn(resumeText);
+    res.status(200).json(linkedInData);
+  } catch (error) {
+    res.status(500).json({ message: 'LinkedIn optimization failed', error: (error as Error).message });
+  }
+};
+
+

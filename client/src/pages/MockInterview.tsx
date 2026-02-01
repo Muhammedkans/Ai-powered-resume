@@ -1,59 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Play, Send, CheckCircle2, AlertCircle, Loader2, Award, ChevronRight, User, Bot } from 'lucide-react';
+import { Mic, Send, Volume2, User, Bot, Award, Play, Square, Loader2, AlertCircle } from 'lucide-react';
 import { generateQuestions, evaluateAnswer } from '../services/api';
 
-interface Feedback {
-  score: number;
-  strengths: string;
-  weaknesses: string;
-  modelAnswer: string;
-}
-
 export const MockInterview = () => {
-  const [step, setStep] = useState<'setup' | 'interview' | 'results'>('setup');
+  const [sessionState, setSessionState] = useState<'setup' | 'interview' | 'feedback'>('setup');
   const [jobDescription, setJobDescription] = useState('');
-  const [resumeText, setResumeText] = useState(''); // In a real app, this would come from the database/state
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [currentAnswer, setCurrentAnswer] = useState('');
-  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [conversation, setConversation] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [interviewScore, setInterviewScore] = useState<any>(null);
 
-  const handleStartInterview = async () => {
-    if (!jobDescription.trim()) return;
+  const resumeText = localStorage.getItem('lastExtractedText') || '';
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const startInterview = async () => {
+    if (!jobDescription.trim()) {
+      alert("Please paste a Job Description first.");
+      return;
+    }
     setLoading(true);
     try {
-      // For demo purposes, we'll ask for resume text if not present
-      // In production, we'd fetch this from the user's uploaded resume
-      const storedResume = localStorage.getItem('lastExtractedText') || "";
-      const result = await generateQuestions(storedResume, jobDescription);
+      const result = await generateQuestions(resumeText, jobDescription);
       setQuestions(result.questions);
-      setStep('interview');
+      setSessionState('interview');
+      // Speak first question
+      speak(result.questions[0]);
     } catch (error) {
       console.error(error);
-      alert("Failed to start interview. Make sure you've uploaded a resume first.");
+      alert("Failed to start interview. Check console.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNextQuestion = async () => {
-    if (!currentAnswer.trim()) return;
+  const handleSendMessage = async () => {
+    if (!userAnswer.trim()) return;
+
+    const currentQ = questions[currentQuestionIndex];
+    const answer = userAnswer;
+    setUserAnswer('');
+
+    // Add to history
+    setConversation(prev => [...prev, { type: 'bot', text: currentQ }, { type: 'user', text: answer }]);
 
     setLoading(true);
     try {
-      const result = await evaluateAnswer(questions[currentQuestionIndex], currentAnswer, jobDescription);
-      const newFeedbacks = [...feedbacks, result.evaluation];
-      setFeedbacks(newFeedbacks);
-      setAnswers([...answers, currentAnswer]);
-      setCurrentAnswer('');
+      // Get feedback on this specific answer
+      const feedback = await evaluateAnswer(currentQ, answer, jobDescription);
+
+      // Store granular feedback if needed, or just proceed
+      console.log("Feedback:", feedback);
 
       if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        const nextQ = questions[currentQuestionIndex + 1];
+        setCurrentQuestionIndex(prev => prev + 1);
+        speak(nextQ);
       } else {
-        setStep('results');
+        setSessionState('feedback');
       }
     } catch (error) {
       console.error(error);
@@ -62,197 +69,137 @@ export const MockInterview = () => {
     }
   };
 
+  const speak = (text: string) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.1;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversation]);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white pt-24 pb-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <header className="mb-10 text-center">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-4">
-            AI MOCK INTERVIEWER
-          </h1>
-          <p className="text-slate-400">Master your technical interviews with personalized AI feedback.</p>
-        </header>
+    <div className="min-h-screen bg-slate-950 text-white pt-24 pb-12 px-4 flex flex-col items-center">
+      {sessionState === 'setup' && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl w-full space-y-8">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto ring-4 ring-purple-600/10">
+              <Bot className="w-10 h-10 text-purple-400" />
+            </div>
+            <h1 className="text-4xl font-black italic">AI Interview Simulator</h1>
+            <p className="text-slate-400 text-lg">Paste the Job Description (JD) below. I will simulate a real technical interview based on your resume and this JD.</p>
+          </div>
 
-        <AnimatePresence mode="wait">
-          {step === 'setup' && (
-            <motion.div
-              key="setup"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-slate-900/50 border border-slate-800 p-8 rounded-3xl"
-            >
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-cyan-400">
-                  <Play className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">Ready to Practice?</h2>
-                  <p className="text-sm text-slate-400">Paste the job description you're preparing for.</p>
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl relative overflow-hidden group focus-within:border-purple-500/50 transition-colors">
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="Paste Job Description here..."
+              className="w-full h-40 bg-transparent text-slate-300 resize-none outline-none placeholder:text-slate-600 text-sm leading-relaxed"
+            />
+          </div>
+
+          <button
+            onClick={startInterview}
+            disabled={loading}
+            className="w-full py-4 bg-purple-600 hover:bg-purple-500 rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-purple-900/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6 fill-current" />}
+            START INTERVIEW
+          </button>
+        </motion.div>
+      )}
+
+      {sessionState === 'interview' && (
+        <div className="max-w-4xl w-full flex flex-col h-[80vh]">
+          {/* Header */}
+          <header className="flex items-center justify-between mb-8 px-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-600/20">
+                <Bot className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-xl">Technical Recruiter</h2>
+                <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /> Live Session
                 </div>
               </div>
+            </div>
+            <div className="bg-slate-900 px-4 py-2 rounded-lg text-sm font-mono text-slate-400 border border-slate-800">
+              Q: {currentQuestionIndex + 1} / {questions.length}
+            </div>
+          </header>
 
-              <textarea
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Paste the Job Description here..."
-                className="w-full h-48 bg-slate-950 border border-slate-700 rounded-2xl p-4 text-slate-300 focus:outline-none focus:border-cyan-500 transition-colors mb-6 resize-none"
-              />
-
-              <button
-                onClick={handleStartInterview}
-                disabled={loading || !jobDescription.trim()}
-                className="w-full py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+          {/* Chat Area */}
+          <div className="flex-1 overflow-y-auto space-y-6 px-4 mb-6 custom-scrollbar">
+            {conversation.map((msg, idx) => (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={idx}
+                className={`flex gap-4 ${msg.type === 'user' ? 'flex-row-reverse' : ''}`}
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                {loading ? 'Analyzing...' : 'Start Mock Interview'}
-              </button>
-            </motion.div>
-          )}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${msg.type === 'user' ? 'bg-cyan-600' : 'bg-purple-600'}`}>
+                  {msg.type === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+                </div>
+                <div className={`p-4 rounded-2xl max-w-[80%] text-sm leading-relaxed shadow-md ${msg.type === 'user'
+                    ? 'bg-cyan-600/10 text-cyan-100 border border-cyan-500/20 rounded-tr-none'
+                    : 'bg-purple-600/10 text-purple-100 border border-purple-500/20 rounded-tl-none'
+                  }`}>
+                  {msg.text}
+                </div>
+              </motion.div>
+            ))}
 
-          {step === 'interview' && (
-            <motion.div
-              key="interview"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-6"
+            {/* Current Question Typing Indicator or Text */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-4">
+              <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div className="p-4 rounded-2xl rounded-tl-none bg-purple-600/10 text-purple-100 border border-purple-500/20 max-w-[80%] shadow-lg">
+                <p className="text-lg font-medium">{questions[currentQuestionIndex]}</p>
+                <button onClick={() => speak(questions[currentQuestionIndex])} className="mt-3 flex items-center gap-2 text-xs font-bold text-purple-400 hover:text-white transition-colors">
+                  <Volume2 className="w-4 h-4" /> Replay Audio
+                </button>
+              </div>
+            </motion.div>
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex items-end gap-3 shadow-2xl relative z-10">
+            <div className={`p-3 rounded-xl transition-all ${isRecording ? 'bg-red-500/20' : 'bg-slate-800'}`}>
+              <Mic className={`w-6 h-6 ${isRecording ? 'text-red-500 animate-pulse' : 'text-slate-400'}`} />
+            </div>
+            <textarea
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+              placeholder="Type your answer here..."
+              className="flex-1 bg-transparent max-h-32 min-h-[50px] py-3 text-slate-200 outline-none resize-none placeholder:text-slate-600"
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={loading || !userAnswer.trim()}
+              className="p-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 active:scale-95"
             >
-              {/* Question Box */}
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs font-black uppercase tracking-widest text-cyan-500">Question {currentQuestionIndex + 1} of {questions.length}</span>
-                  <div className="flex gap-1">
-                    {questions.map((_, i) => (
-                      <div key={i} className={`h-1 w-4 rounded-full ${i <= currentQuestionIndex ? 'bg-cyan-500' : 'bg-slate-800'}`} />
-                    ))}
-                  </div>
-                </div>
-                <h3 className="text-xl font-bold text-white leading-relaxed">
-                  {questions[currentQuestionIndex]}
-                </h3>
-              </div>
+              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+            </button>
+          </div>
+        </div>
+      )}
 
-              {/* Chat Interface */}
-              <div className="flex flex-col gap-4">
-                <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 min-h-[300px] flex flex-col">
-                  <div className="flex-1 space-y-4 mb-4">
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 text-cyan-400" />
-                      </div>
-                      <div className="bg-slate-900 px-4 py-2 rounded-2xl text-sm border border-slate-700 max-w-[80%] text-slate-300">
-                        Go ahead and provide your answer. Be as detailed as possible!
-                      </div>
-                    </div>
-
-                    {currentAnswer && (
-                      <div className="flex gap-3 justify-end">
-                        <div className="bg-cyan-600 px-4 py-2 rounded-2xl text-sm max-w-[80%] text-white">
-                          {currentAnswer}
-                        </div>
-                        <div className="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-500/20">
-                          <User className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <textarea
-                      value={currentAnswer}
-                      onChange={(e) => setCurrentAnswer(e.target.value)}
-                      placeholder="Type your answer here..."
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl p-3 text-sm focus:outline-none focus:border-cyan-500 transition-colors resize-none"
-                      rows={3}
-                    />
-                    <button
-                      onClick={handleNextQuestion}
-                      disabled={loading || !currentAnswer.trim()}
-                      className="w-12 h-12 bg-cyan-600 hover:bg-cyan-500 rounded-2xl flex items-center justify-center self-end transition-all disabled:opacity-50"
-                    >
-                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 'results' && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-8"
-            >
-              <div className="bg-gradient-to-br from-slate-900 to-blue-900 border border-blue-500/20 p-8 rounded-3xl text-center">
-                <Award className="w-16 h-16 text-yellow-400 mx-auto mb-4 drop-shadow-[0_0_15px_rgba(250,204,21,0.4)]" />
-                <h2 className="text-3xl font-black mb-2">Interview Complete!</h2>
-                <p className="text-blue-200">Here's a breakdown of your performance.</p>
-                <div className="flex justify-center gap-10 mt-8">
-                  <div>
-                    <div className="text-4xl font-black text-white">{Math.round(feedbacks.reduce((acc, f) => acc + f.score, 0) / feedbacks.length)}/10</div>
-                    <div className="text-xs uppercase font-bold text-blue-300 tracking-wider">Average Score</div>
-                  </div>
-                  <div className="w-px h-12 bg-blue-500/30" />
-                  <div>
-                    <div className="text-4xl font-black text-white">{questions.length}</div>
-                    <div className="text-xs uppercase font-bold text-blue-300 tracking-wider">Questions Asked</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {feedbacks.map((feedback, i) => (
-                  <div key={i} className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl">
-                    <div className="flex justify-between items-start mb-6">
-                      <div className="flex gap-2 items-center">
-                        <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-xs font-bold text-slate-400">Q{i + 1}</div>
-                        <h4 className="font-bold text-slate-200">{questions[i]}</h4>
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-bold ${feedback.score >= 8 ? 'bg-green-500/10 text-green-400' : feedback.score >= 5 ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
-                        Score: {feedback.score}/10
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                      <div className="bg-green-500/5 border border-green-500/10 p-4 rounded-2xl">
-                        <div className="flex items-center gap-2 text-green-400 font-bold text-xs uppercase mb-2">
-                          <CheckCircle2 className="w-4 h-4" /> Your Strengths
-                        </div>
-                        <p className="text-sm text-slate-400 leading-relaxed">{feedback.strengths}</p>
-                      </div>
-                      <div className="bg-red-500/5 border border-red-500/10 p-4 rounded-2xl">
-                        <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase mb-2">
-                          <AlertCircle className="w-4 h-4" /> Improvement Areas
-                        </div>
-                        <p className="text-sm text-slate-400 leading-relaxed">{feedback.weaknesses}</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                      <h5 className="text-xs font-black text-slate-500 uppercase mb-3 flex items-center gap-2 italic">
-                        <Bot className="w-3 h-3" /> The Perfect Response
-                      </h5>
-                      <p className="text-sm text-slate-300 leading-relaxed text-justify italic">
-                        "{feedback.modelAnswer}"
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setStep('setup')}
-                className="w-full py-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-2xl font-bold transition-all"
-              >
-                Try Another Interview
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      {sessionState === 'feedback' && (
+        <div className="text-center py-20">
+          <Award className="w-20 h-20 text-yellow-500 mx-auto mb-6" />
+          <h2 className="text-4xl font-black mb-4">Interview Complete!</h2>
+          <p className="text-slate-400">Your AI-generated feedback report is ready.</p>
+          {/* Add result component here */}
+        </div>
+      )}
     </div>
   );
 };

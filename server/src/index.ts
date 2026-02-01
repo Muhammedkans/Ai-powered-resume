@@ -8,6 +8,7 @@ dotenv.config();
 import resumeRoutes from './routes/resumeRoutes';
 import jobRoutes from './routes/jobRoutes';
 import interviewRoutes from './routes/interviewRoutes';
+import applicationRoutes from './routes/applicationRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use('/api/resume', resumeRoutes);
 app.use('/api/job', jobRoutes);
 app.use('/api/interview', interviewRoutes);
+app.use('/api/applications', applicationRoutes);
 
 // Basic Route
 app.get('/', (req: Request, res: Response) => {
