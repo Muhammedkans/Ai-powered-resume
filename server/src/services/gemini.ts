@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// import { GoogleGenerativeAI } from "@google/generative-ai";
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,8 +11,10 @@ if (!process.env.GEMINI_API_KEY) {
   console.log("✅ Gemini API Key detected. Ready for analysis.");
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const getModel = () => {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+};
 
 export const analyzeResume = async (resumeText: string) => {
   if (!process.env.GEMINI_API_KEY) {
@@ -40,7 +43,7 @@ export const analyzeResume = async (resumeText: string) => {
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await getModel().generateContent(prompt);
     const response = await result.response;
     let text = response.text().trim();
 
@@ -88,7 +91,7 @@ export const matchResumeWithJob = async (resumeText: string, jobDescription: str
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await getModel().generateContent(prompt);
     const response = await result.response;
     let text = response.text();
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -136,7 +139,7 @@ export const generateResumeStructuredData = async (rawText: string) => {
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await getModel().generateContent(prompt);
     const response = await result.response;
     let text = response.text().trim();
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -168,7 +171,7 @@ export const generateCoverLetter = async (resumeText: string, jobDescription: st
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await getModel().generateContent(prompt);
     const response = await result.response;
     return response.text().trim();
   } catch (error) {
@@ -201,7 +204,7 @@ export const optimizeLinkedIn = async (resumeText: string) => {
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await getModel().generateContent(prompt);
     const response = await result.response;
     let text = response.text().trim();
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { matchResumeWithJob } from '../services/gemini';
+// import { matchResumeWithJob } from '../services/gemini';
+const { matchResumeWithJob } = require('../services/geminiService');
 
 export const analyzeJobMatch = async (req: Request, res: Response) => {
   try {
