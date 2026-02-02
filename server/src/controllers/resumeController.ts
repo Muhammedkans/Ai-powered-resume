@@ -46,7 +46,9 @@ export const uploadResume = async (req: Request, res: Response) => {
     if (!extractedText || extractedText.trim().length < 50) {
       console.log(">>> [PDF] Text insufficient. Attempting Vision API...");
       try {
-        aiAnalysis = await analyzeResumeFile(filePath, mimeType);
+        const visionAnalysis = await analyzeResumeFile(filePath, mimeType);
+        aiAnalysis = visionAnalysis;
+        extractedText = visionAnalysis.extractedText || "Text extracted via Vision AI";
       } catch (visionError: any) {
         console.error(">>> [GEMINI] Vision API Failed:", visionError);
         return res.status(500).json({

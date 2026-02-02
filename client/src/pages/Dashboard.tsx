@@ -2,8 +2,10 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText, ArrowRight, CheckCircle, MessageSquare, Loader2,
-  Upload, Cloud, AlertCircle, Linkedin, Briefcase, Sparkles, Copy, Wand2
+  Upload, Cloud, AlertCircle, Linkedin, Briefcase, Sparkles, Copy, Wand2, Download
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Link } from 'react-router-dom';
 import { JobMatcher } from '../components/JobMatcher';
 import { analyzeResume, startResumeRefinement } from '../services/api';
@@ -12,8 +14,11 @@ export const Dashboard = () => {
   const [resumeData, setResumeData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [scoreUpdated, setScoreUpdated] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLDivElement>(null);
 
   const handleFile = async (file: File) => {
     if (!file || file.type !== 'application/pdf') {
@@ -36,20 +41,51 @@ export const Dashboard = () => {
   };
 
   const handleAutoImprove = async () => {
-    if (!resumeData?.extractedText) return;
+    const textToRefine = resumeData?.extractedText || localStorage.getItem('lastExtractedText');
+
+    if (!textToRefine) {
+      alert("System could not find enough text in your resume to refine. Please try a different PDF or re-upload.");
+      return;
+    }
+
     setRefining(true);
     try {
-      const data = await startResumeRefinement(resumeData.extractedText);
+      console.log(">>> [FE] Starting refinement for:", textToRefine.substring(0, 50));
+      const data = await startResumeRefinement(textToRefine);
+
       setResumeData((prev: any) => ({
         ...prev,
         analysis: data.analysis || data
       }));
+
+      setScoreUpdated(true);
+      setShowDownload(true);
+      setTimeout(() => setScoreUpdated(false), 3000);
     } catch (error) {
-      console.error(error);
-      alert("AI Refinement failed. Please try again later.");
+      console.error("Refine Error:", error);
+      alert("AI Refinement failed. This could be due to rate limits. Please wait 10 seconds and try again.");
     } finally {
       setRefining(false);
     }
+  };
+
+  const downloadImprovedResume = async () => {
+    if (!pdfRef.current) return;
+
+    const canvas = await html2canvas(pdfRef.current, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff"
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.save(`${resumeData.analysis.candidateName || 'Improved'}_Resume_ATS.pdf`);
   };
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -224,8 +260,8 @@ export const Dashboard = () => {
                           </div>
                         </div>
 
-                        {/* AUTO-REFINE BUTTON */}
-                        <div className="mt-6">
+                        {/* AUTO-REFINE & DOWNLOAD BUTTONS */}
+                        <div className="mt-6 flex flex-wrap gap-4">
                           <button
                             disabled={refining}
                             onClick={handleAutoImprove}
@@ -234,6 +270,17 @@ export const Dashboard = () => {
                             {refining ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />}
                             {refining ? "Architecting Excellence..." : "Auto-Improve My Resume (AI)"}
                           </button>
+
+                          {showDownload && (
+                            <motion.button
+                              initial={{ opacity: 0, x: 20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              onClick={downloadImprovedResume}
+                              className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(16,185,129,0.2)] hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                            >
+                              <Download className="w-5 h-5" /> Download ATS Optimized PDF
+                            </motion.button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -342,6 +389,55 @@ export const Dashboard = () => {
             )}
           </div>
         )}
+      </div>
+
+      {/* HIDDEN PDF TEMPLATE FOR DOWNLOADING */}
+      <div className="fixed left-[-9999px] top-0 shadow-2xl">
+        <div
+          ref={pdfRef}
+          className="w-[210mm] min-h-[297mm] p-[20mm] bg-white text-slate-900 font-sans"
+          style={{ fontFamily: 'Arial, sans-serif' }}
+        >
+          {resumeData && (
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold uppercase tracking-tighter mb-2 border-b-2 border-slate-900 pb-2">
+                {resumeData.analysis.candidateName || "YOUR NAME"}
+              </h1>
+
+              <div className="mt-8">
+                <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-1 mb-4">Executive Summary</h2>
+                <p className="text-sm leading-relaxed text-slate-700 italic">
+                  {resumeData.analysis.summary}
+                </p>
+              </div>
+
+              <div className="mt-8">
+                <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-1 mb-4">Professional Experience</h2>
+                <ul className="space-y-4">
+                  {resumeData.analysis.rebuiltContent?.experiencePoints?.map((point: string, i: number) => (
+                    <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-800">
+                      <span className="font-bold">•</span>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-8">
+                <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-1 mb-4">Core Skills & Competencies</h2>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  {resumeData.analysis.rebuiltContent?.skillsSection?.map((skill: string, i: number) => (
+                    <span key={i} className="text-sm font-bold text-slate-700">• {skill}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-12 pt-8 border-t border-slate-100 italic text-[10px] text-slate-400 text-center">
+                Generated by Ai Powered Resume Architect - Optimized for High Fidelity ATS Scanners
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

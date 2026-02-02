@@ -153,6 +153,7 @@ async function analyzeResumeFile(filePath, mimeType) {
           "score": number (0-100, strict),
           "percentile": number (1-99),
           "candidateName": "inferred name",
+          "extractedText": "TRANSCRIPTION OF THE ENTIRE RESUME CONTENT (VERY IMPORTANT)",
           "summary": "A fully rewritten, powerful summary based on their visible data",
           "strengths": ["Visual layout rating", "Content structure", "Key skills found"],
           "improvements": ["Formatting issues", "Missing ATS keywords", "Content gaps"],
