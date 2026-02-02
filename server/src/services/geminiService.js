@@ -33,11 +33,11 @@ function getModel() {
  */
 async function callGemini(prompt, isVision = false, visionData = null) {
   const modelsToTry = [
-    "gemini-2.0-flash",
-    "gemini-exp-1206",
-    "gemini-flash-latest",
+    "gemini-1.5-flash", // BEST FOR FREE TIER (High Rate Limits)
     "gemini-1.5-flash-latest",
-    "gemini-1.5-flash"
+    "gemini-flash-latest",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash-exp" // Use experimental only as last resort
   ];
 
   // If we already found a working model, push it to front
@@ -47,17 +47,29 @@ async function callGemini(prompt, isVision = false, visionData = null) {
     modelsToTry.unshift(activeModelName);
   }
 
+  // Prioritize stable models for Vision/File tasks
+  if (isVision) {
+    modelsToTry.sort((a, b) => {
+      if (a.includes("1.5-flash")) return -1; // Prefer 1.5 Flash for vision
+      return 1;
+    });
+  }
+
   let lastError = null;
   for (const modelName of modelsToTry) {
     try {
       console.log(`>>> [GEMINI] Trying model: ${modelName}...`);
+
+      // ADDED: Small delay to prevent immediate 429 cascading
+      await new Promise(r => setTimeout(r, 1000));
+
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: modelName });
 
       let result;
       // RETRY LOGIC for 429 (Quota Exceeded)
       let attempts = 0;
-      const maxRetries = 3;
+      const maxRetries = 2; // Reduced retries per model to switch faster
 
       while (attempts <= maxRetries) {
         try {
@@ -70,11 +82,11 @@ async function callGemini(prompt, isVision = false, visionData = null) {
         } catch (callError) {
           if (callError.message.includes("429") && attempts < maxRetries) {
             attempts++;
-            const waitTime = attempts * 2000; // 2s, 4s, 6s
-            console.warn(`>>> [GEMINI QUOTA] Hit rate limit on ${modelName}. Waiting ${waitTime}ms to retry...`);
+            const waitTime = attempts * 2000;
+            console.warn(`>>> [GEMINI QUOTA] Hit rate limit on ${modelName}. Waiting ${waitTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
           } else {
-            throw callError; // Fatal error or max retries reached
+            throw callError;
           }
         }
       }
@@ -84,15 +96,17 @@ async function callGemini(prompt, isVision = false, visionData = null) {
       return result.response.text();
     } catch (error) {
       lastError = error;
-      console.error(`>>> [GEMINI ERROR] Model ${modelName} failed:`, error.message.split('\n')[0]);
+      const msg = error.message.split('\n')[0];
+      console.error(`>>> [GEMINI ERROR] Model ${modelName} failed:`, msg);
 
-      if (error.message.includes("404") || error.message.includes("not found")) {
-        console.warn(`>>> [GEMINI AUTO-FIX] Model '${modelName}' returned 404. Attempting to switch to next model...`);
-        continue;
-      }
-      throw error; // Other errors (quota, key invalid) should fail normally
+      if (msg.includes("API key not valid")) throw error;
+
+      console.warn(`>>> [GEMINI AUTO-FIX] Switching to next model...`);
+      continue;
     }
   }
+
+  console.error(">>> [GEMINI FATAL] All models failed.");
   throw lastError;
 }
 
@@ -124,39 +138,46 @@ async function analyzeResume(resumeText) {
 }
 
 async function analyzeResumeFile(filePath, mimeType) {
-  const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
-  const uploadResult = await fileManager.uploadFile(filePath, {
-    mimeType: mimeType,
-    displayName: "User Resume",
-  });
+  console.log(">>> [GEMINI VISION] Reading file for Inline-Base64 Analysis...");
 
-  const prompt = `
-    You are a Vision-Enhanced ATS System. Deep scan this resume image/PDF.
-    
-    Return JSON:
-    {
-      "score": number (0-100, strict),
-      "percentile": number (1-99),
-      "candidateName": "inferred name",
-      "summary": "A fully rewritten, powerful summary based on their visible data",
-      "strengths": ["Visual layout rating", "Content structure", "Key skills found"],
-      "improvements": ["Formatting issues", "Missing ATS keywords", "Content gaps"],
-      "rebuiltContent": {
-        "experiencePoints": ["Rewrite top bullet points to be impactful"],
-        "skillsSection": ["Optimized skills list"]
-      },
-      "eliteActionPlan": "What is the #1 thing they must fix visually or content-wise?"
-    }
-  `;
+  try {
+    // 1. Read file as Base64
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString('base64');
 
-  const text = await callGemini(prompt, true, {
-    fileData: {
-      fileUri: uploadResult.file.uri,
-      mimeType: uploadResult.file.mimeType,
-    }
-  });
+    const prompt = `
+        You are a Vision-Enhanced ATS System. Deep scan this resume image/PDF.
+        
+        Return JSON:
+        {
+          "score": number (0-100, strict),
+          "percentile": number (1-99),
+          "candidateName": "inferred name",
+          "summary": "A fully rewritten, powerful summary based on their visible data",
+          "strengths": ["Visual layout rating", "Content structure", "Key skills found"],
+          "improvements": ["Formatting issues", "Missing ATS keywords", "Content gaps"],
+          "rebuiltContent": {
+            "experiencePoints": ["Rewrite top bullet points to be impactful"],
+            "skillsSection": ["Optimized skills list"]
+          },
+          "eliteActionPlan": "What is the #1 thing they must fix visually or content-wise?"
+        }
+      `;
 
-  return cleanJsonResponse(text);
+    // 2. Send directly (No Upload/Wait needed)
+    console.log(">>> [GEMINI VISION] Sending Base64 payload...");
+    const text = await callGemini(prompt, true, {
+      inlineData: {
+        data: base64Data,
+        mimeType: mimeType
+      }
+    });
+
+    return cleanJsonResponse(text);
+  } catch (e) {
+    console.error(">>> [GEMINI VISION FATAL] Base64 Analysis failed:", e);
+    throw e;
+  }
 }
 
 async function matchResumeWithJob(resumeText, jobDescription) {

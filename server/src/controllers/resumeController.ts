@@ -47,10 +47,10 @@ export const uploadResume = async (req: Request, res: Response) => {
       console.log(">>> [PDF] Text insufficient. Attempting Vision API...");
       try {
         aiAnalysis = await analyzeResumeFile(filePath, mimeType);
-      } catch (visionError) {
+      } catch (visionError: any) {
         console.error(">>> [GEMINI] Vision API Failed:", visionError);
-        return res.status(400).json({
-          message: "Could not read PDF. It appears to be scanned/image-based, and AI analysis failed. Please upload a digital (text-based) PDF."
+        return res.status(500).json({
+          message: `AI Error: ${visionError.message || "Vision analysis failed"}. (Scanned PDF)`
         });
       }
     } else {
@@ -119,4 +119,17 @@ export const generateLinkedInProfile = async (req: Request, res: Response) => {
   }
 };
 
+export const refineResume = async (req: Request, res: Response) => {
+  try {
+    const { resumeText } = req.body;
+    if (!resumeText) return res.status(400).json({ message: 'Resume text is required' });
 
+    console.log(">>> [REFINE] Refining resume text with FAANG-Tier logic...");
+    const refinedData = await analyzeResume(resumeText + "\n\n [SYSTEM INSTRUCTION]: Acts as a FAANG Senior Technical Recruiter. REWRITE the experience and skills sections found in the text above. Use ONLY the STAR method. Ensure every bullet point includes a quantified metric (%, $, hours). The 'rebuiltContent' module MUST be the highest possible quality for a Silicon Valley interview.");
+
+    res.status(200).json(refinedData);
+  } catch (error) {
+    console.error("Refine error:", error);
+    res.status(500).json({ message: 'Refinement failed', error: (error as Error).message });
+  }
+};

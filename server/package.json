@@ -34,6 +34,7 @@
     "mongoose": "^9.1.5",
     "mongoose-paginate-v2": "^1.9.1",
     "multer": "^2.0.2",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.3.93"
   }
 }
