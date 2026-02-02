@@ -1,47 +1,25 @@
 import { Request, Response } from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import dotenv from 'dotenv';
+// import { GoogleGenerativeAI } from '@google/generative-ai'; // Removed to avoid 'gr' crash
+// import dotenv from 'dotenv';
+// dotenv.config();
 
-dotenv.config();
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const { generateInterviewQuestions: serviceGenerateQuestions, evaluateInterviewAnswer: serviceEvaluateAnswer } = require('../services/geminiService');
 
 export const generateInterviewQuestions = async (req: Request, res: Response) => {
   try {
     const { resumeText, jobDescription } = req.body;
 
-    if (!resumeText || !jobDescription) {
-      return res.status(400).json({ message: 'Resume text and Job Description are required' });
+    if (!jobDescription) {
+      return res.status(400).json({ message: 'Job Description is required' });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Call pure JS service
+    // Note: service currently accepts (jobDescription), we invoke it as such. 
+    // If resumeText is needed later, update service.
+    const result = await serviceGenerateQuestions(jobDescription, resumeText);
 
-    const prompt = `
-      You are an expert technical interviewer. Based on the following Candidate Resume and Job Description, generate 5 challenging interview questions tailored specifically to this candidate for this role.
-      
-      Candidate Resume:
-      ${resumeText}
-      
-      Job Description:
-      ${jobDescription}
-      
-      Return the output as a JSON array of strings. Do not include any other text.
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
-
-    // Clean up response if AI includes markdown code blocks
-    if (text.startsWith("```json")) {
-      text = text.replace("```json", "").replace("```", "").trim();
-    } else if (text.startsWith("```")) {
-      text = text.replace(/```/g, "").trim();
-    }
-
-    const questions = JSON.parse(text);
-
-    res.status(200).json({ questions });
+    // Result is expected to be { questions: [] } or fallback
+    res.status(200).json(result);
 
   } catch (error) {
     console.error('Error generating questions:', error);
@@ -53,35 +31,8 @@ export const evaluateAnswer = async (req: Request, res: Response) => {
   try {
     const { question, answer, jobDescription } = req.body;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `
-      You are an expert interviewer. Evaluate the candidate's answer to the following interview question for a position described in the Job Description.
-      
-      Question: ${question}
-      Candidate Answer: ${answer}
-      Job Context: ${jobDescription}
-      
-      Provide:
-      1. A score out of 10.
-      2. Strengths of the answer.
-      3. Weaknesses or missing points.
-      4. A "Model Answer" (how a senior candidate would answer).
-      
-      Return the output strictly in JSON format with keys: "score", "strengths", "weaknesses", "modelAnswer".
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
-
-    if (text.startsWith("```json")) {
-      text = text.replace("```json", "").replace("```", "").trim();
-    } else if (text.startsWith("```")) {
-      text = text.replace(/```/g, "").trim();
-    }
-
-    const evaluation = JSON.parse(text);
+    // Call pure JS service
+    const evaluation = await serviceEvaluateAnswer(question, answer); // update signature if context needed
 
     res.status(200).json({ evaluation });
 

@@ -230,13 +230,25 @@ export const Dashboard = () => {
                     <div className="text-center md:text-left">
                       <h2 className="text-4xl font-black mb-3">Overall Profile Strength</h2>
                       <p className="text-slate-400 text-lg font-medium leading-relaxed max-w-xl">
-                        Your resume is performing better than 82% of candidates in the tech industry. Focus on the improvements to reach the elite 1% tier.
+                        Your resume is performing better than <span className="text-cyan-400">{resumeData.analysis.percentile || 82}%</span> of candidates in the tech industry.
+                        <br /><br />
+                        <span className="text-purple-400 font-bold">🚀 Elite Strategy:</span> {resumeData.analysis.eliteActionPlan || "Focus on the improvements to reach the elite 1% tier."}
                       </p>
                       <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-6">
                         <button onClick={() => setResumeData(null)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-black uppercase tracking-widest text-slate-400 transition-colors">Re-analyze Resume</button>
                         <div className="flex items-center gap-2 text-xs font-bold text-green-500 bg-green-500/10 px-4 py-2 rounded-xl border border-green-500/20">
                           <CheckCircle className="w-4 h-4" /> Ready for Applications
                         </div>
+                      </div>
+
+                      {/* AUTO-REFINE BUTTON */}
+                      <div className="mt-6 flex gap-4">
+                        <button
+                          className="px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-pink-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                          onClick={() => alert("Auto-Improve feature coming in next step (Backend integration pending)!")}
+                        >
+                          <Sparkles className="w-4 h-4" /> Auto-Improve Resume (AI)
+                        </button>
                       </div>
                     </div>
                   </div>

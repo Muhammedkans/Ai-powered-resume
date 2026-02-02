@@ -4,6 +4,11 @@ const api = axios.create({
   baseURL: 'http://localhost:5000/api',
 });
 
+export const startResumeRefinement = async (resumeText: string) => {
+  const response = await api.post('/resume/refine', { resumeText });
+  return response.data;
+};
+
 export const analyzeResume = async (file: File) => {
   const formData = new FormData();
   formData.append('resume', file);

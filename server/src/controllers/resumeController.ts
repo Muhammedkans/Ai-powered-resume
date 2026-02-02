@@ -75,7 +75,7 @@ export const uploadResume = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error processing resume:", error);
     res.status(500).json({
-      message: 'Could not read PDF. Please ensure it is a valid text-based PDF (not scanned).',
+      message: 'Processing Failed. See error details for help.',
       error: (error as Error).message
     });
   }
